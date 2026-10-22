@@ -1,7 +1,7 @@
 const { ObjectId } = require("mongodb");
 
 
-function checkAuth(role) {
+function checkAuth(roles) {
     return async (req, res, next) => {
         try {
 
@@ -33,7 +33,7 @@ function checkAuth(role) {
                 });
             }
 
-            if(user.role != role) {
+            if(!roles.includes(user.role)) {
                 return res.status(401).json({
                     message: "You are Unauthorized"
                 });

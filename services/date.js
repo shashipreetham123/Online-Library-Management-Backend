@@ -15,4 +15,9 @@ function addDays(date, days) {
     return newDate
 }
 
-module.exports = {today, addDays}
+function dateTimeString(date) {
+
+    return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`
+}
+
+module.exports = {today, addDays, dateTimeString}

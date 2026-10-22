@@ -12,12 +12,15 @@ async function processRequests(ReservesCollection, BorrowRequestsCollection, Bor
 
     const availableCopies = book.availableCopies
 
+    
+
     if (availableCopies == 0) return false
 
     const requests = await BorrowRequestsCollection
         .find({ bookId })
         .sort({ requested: 1 })
         .limit(availableCopies)
+        .toArray()
 
     let accepted = 0
     
@@ -29,7 +32,7 @@ async function processRequests(ReservesCollection, BorrowRequestsCollection, Bor
 
         if (!processed) continue
 
-        const updated = await BooksCollection.fineOneAndUpdate(
+        const updated = await BooksCollection.findOneAndUpdate(
             {
                 _id: bookObjectId,
                 availableCopies: { $gt: 0 }

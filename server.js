@@ -18,11 +18,11 @@ const userRoutes = require("./routes/user-routes")
 
 const libraryRoutes = require("./routes/library-routes")
 
-const tracker = require("./config/tracker")
+const tracker = require("./services/tracker")
 
 const PORT = process.env.PORT
 
-const TRACKER_TIME_INTERVAL = 1000
+const TRACKER_TIME_INTERVAL = 5000
 
 app.use(express.json())
 
@@ -51,9 +51,9 @@ app.use(
 
 app.use("/api/auth", authRoutes)
 
-app.use("/api/user", checkAuth("member"), userRoutes)
+app.use("/api/user", checkAuth(["member", "librarian"]), userRoutes)
 
-app.use("/api/library", checkAuth("librarian"), libraryRoutes)
+app.use("/api/library", checkAuth(["librarian", "member"]), libraryRoutes)
 
 app.get("/", (req, res) => {
     res.send("Authentication Server is Running")

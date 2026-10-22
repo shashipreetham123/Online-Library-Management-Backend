@@ -8,6 +8,8 @@ const { ObjectId } = require("mongodb")
 
 const processRequests = require("../services/process-requests")
 
+const {addRecord} = require("../services/history")
+
 router.get("/", (req, res) => {
     res.status(200).json(req.user)
 })
@@ -77,8 +79,12 @@ router.get("/search", async (req, res) => {
                 $in: category.split(",")
             }
         }
-        if (available) {
+        if (available && available == "1") {
             filters["availableCopies"] = { $gt: 0 }
+        }
+
+        if (available && available == "0") {
+            filters["availableCopies"] = 0
         }
 
         const db = req.app.locals.db
@@ -142,6 +148,8 @@ router.post("/request/borrow", async (req, res) => {
         const db = req.app.locals.db
 
         const books = db.collection("books")
+        const ReservesCollection = db.collection("Reserves")
+        const BorrowsCollection = db.collection("Borrows")
 
         // Checking if Book Exists in the Library
 
@@ -156,6 +164,20 @@ router.post("/request/borrow", async (req, res) => {
         }
 
         const username = req.user.username
+
+        // Checking if User Has Overdues
+
+
+        const hasOverdues = await BorrowsCollection.findOne({
+            username,
+            status: "overdue"
+        })
+
+        if (hasOverdues) {
+            return res.status(400).json({
+                message: "Cannot Request a Book if User Has Overdue."
+            })
+        }
 
         const BorrowRequests = db.collection("BorrowRequests")
 
@@ -172,6 +194,30 @@ router.post("/request/borrow", async (req, res) => {
             })
         }
 
+        // Checking If the Book is Already Borrowed or Reserved by the User.
+
+        const reserved = await ReservesCollection.findOne({
+            username,
+            bookId
+        })
+
+        if (reserved) {
+            return res.status(400).json({
+                message: "The Book is Already Reserved by the User."
+            })
+        }
+
+        const borrowed = await BorrowsCollection.findOne({
+            username,
+            bookId
+        })
+
+        if (borrowed) {
+            return res.status(400).json({
+                message: "The Book is Already Borrowed by the User."
+            })
+        }
+
         // Creating the Borrow Request and Inserting into the Database
 
         const borrowRequest = new BorrowRequest(username, bookId, timePeriod)
@@ -180,27 +226,33 @@ router.post("/request/borrow", async (req, res) => {
 
         // Creating a Reserve If Book is Available
 
-        const ReservesCollection = db.collection("Reserves")
-        const BorrowsCollection = db.collection("Borrows")
-
         const accepted = await processRequests(ReservesCollection, BorrowRequests, BorrowsCollection, books, bookId)
 
         if (accepted) {
 
             const reserve = await ReservesCollection.findOne({ username, bookId })
-
-            return res.status(200).json({
-                message: "Book Successfully Reserved.",
-                data: reserve
-            })
+            if (reserve) {
+                const history = await addRecord(db, bookId, "reserved", username, timePeriod, reserve)
+                
+                return res.status(200).json({
+                    message: "Book Successfully Reserved.",
+                    data: reserve,
+                    history
+                })
+            }
         }
+
+        const history = await addRecord(db, bookId, "request", username, timePeriod, borrowRequest)
 
         return res.status(200).json({
             message: "Request Successfully Created.",
-            data: borrowRequest
+            data: borrowRequest,
+            history
         })
 
     } catch (error) {
+
+        console.log(error)
 
         return res.status(500).json({
             message: "Internal Server Error",
@@ -240,8 +292,12 @@ router.delete("/request/borrow/:bookId", async (req, res) => {
             bookId
         })
 
+        const history = await addRecord(db, bookId, "request-cancel", username, borrowRequest.timePeriod, borrowRequest)
+
         return res.status(200).json({
-            message: "Request Cancelled Successfully"
+            message: "Request Cancelled Successfully",
+            data: borrowRequest,
+            history
         })
 
     } catch (error) {
@@ -251,6 +307,65 @@ router.delete("/request/borrow/:bookId", async (req, res) => {
             data: error
         })
 
+    }
+})
+
+router.post("/reserve/cancel/:pin", async (req, res) => {
+    try {
+
+        const pin = req.params.pin
+
+        const username = req.user.username
+
+        const db = req.app.locals.db
+
+        const ReservesCollection = db.collection("Reserves")
+
+        const reserve = await ReservesCollection.findOneAndDelete({
+            username,
+            pin
+        })
+
+        if (!reserve) {
+            return res.status(400).json({
+                message: "Reserve Not Found.",
+            })
+        }
+
+        const BorrowRequestCollection = db.collection("BorrowRequests")
+        const BorrowsCollection = db.collection("Borrows")
+        const BooksCollection = db.collection("books")
+
+        const bookId = reserve.bookId
+
+        await BooksCollection.findOneAndUpdate(
+            {
+                _id: new ObjectId(bookId)
+            },
+            {
+                $inc: {
+                    availableCopies: 1
+                }
+            }
+        )
+
+        await processRequests(ReservesCollection, BorrowRequestCollection, BorrowsCollection, BooksCollection, bookId)
+
+        const history = await addRecord(db, bookId, "reserve-cancel", username, reserve.timePeriod, reserve)
+
+        return res.status(200).json({
+            message: "Reserve Successfully Cancelled",
+            data: reserve,
+            history
+        })
+
+    } catch (error) {
+
+        console.log(error)
+
+        return res.status(500).json({
+            message: "Internal Server Error"
+        })
     }
 })
 

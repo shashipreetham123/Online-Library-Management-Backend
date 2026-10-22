@@ -1,4 +1,4 @@
-const { today, addDays } = require("./date")
+const { today, addDays } = require("../services/date")
 
 class Reserve {
     constructor(request, pin) {
@@ -6,6 +6,7 @@ class Reserve {
         this.bookId = request.bookId
         this.timePeriod = request.timePeriod
         this.requested = request.requested
+        this.status = "reserved"
 
         this.pin = pin
 

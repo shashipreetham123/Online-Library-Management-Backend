@@ -1,4 +1,4 @@
-const { today, addDays } = require("./date") 
+const { today, addDays } = require("../services/date") 
 
 class BorrowRequest {
     constructor(username, bookId, timePeriod) {
@@ -7,6 +7,7 @@ class BorrowRequest {
         this.timePeriod = timePeriod
         this.bookId = bookId
         this.requested = today()
+        this.status = "requested"
 
     }
 }
